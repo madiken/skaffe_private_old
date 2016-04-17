@@ -1,0 +1,39 @@
+Cuda number of devices: 1
+Current device id: 0
+Note: Google Test filter = *EltwiseProd*
+[==========] Running 8 tests from 4 test cases.
+[----------] Global test environment set-up.
+[----------] 2 tests from EltwiseProdGroupLayerTest/0, where TypeParam = caffe::FloatCPU
+[ RUN      ] EltwiseProdGroupLayerTest/0.TestForward
+[       OK ] EltwiseProdGroupLayerTest/0.TestForward (235 ms)
+[ RUN      ] EltwiseProdGroupLayerTest/0.TestGradient
+[       OK ] EltwiseProdGroupLayerTest/0.TestGradient (0 ms)
+[----------] 2 tests from EltwiseProdGroupLayerTest/0 (236 ms total)
+
+[----------] 2 tests from EltwiseProdGroupLayerTest/1, where TypeParam = caffe::DoubleCPU
+[ RUN      ] EltwiseProdGroupLayerTest/1.TestForward
+[       OK ] EltwiseProdGroupLayerTest/1.TestForward (0 ms)
+[ RUN      ] EltwiseProdGroupLayerTest/1.TestGradient
+[       OK ] EltwiseProdGroupLayerTest/1.TestGradient (1 ms)
+[----------] 2 tests from EltwiseProdGroupLayerTest/1 (1 ms total)
+
+[----------] 2 tests from EltwiseProdGroupLayerTest/2, where TypeParam = caffe::FloatGPU
+[ RUN      ] EltwiseProdGroupLayerTest/2.TestForward
+[       OK ] EltwiseProdGroupLayerTest/2.TestForward (0 ms)
+[ RUN      ] EltwiseProdGroupLayerTest/2.TestGradient
+[       OK ] EltwiseProdGroupLayerTest/2.TestGradient (5 ms)
+[----------] 2 tests from EltwiseProdGroupLayerTest/2 (5 ms total)
+
+[----------] 2 tests from EltwiseProdGroupLayerTest/3, where TypeParam = caffe::DoubleGPU
+[ RUN      ] EltwiseProdGroupLayerTest/3.TestForward
+[       OK ] EltwiseProdGroupLayerTest/3.TestForward (0 ms)
+[ RUN      ] EltwiseProdGroupLayerTest/3.TestGradient
+[       OK ] EltwiseProdGroupLayerTest/3.TestGradient (1 ms)
+[----------] 2 tests from EltwiseProdGroupLayerTest/3 (1 ms total)
+
+[----------] Global test environment tear-down
+[==========] 8 tests from 4 test cases ran. (243 ms total)
+[  PASSED  ] 8 tests.
+
+  YOU HAVE 2 DISABLED TESTS
+

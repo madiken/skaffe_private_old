@@ -1,0 +1,170 @@
+#include <algorithm>
+#include <vector>
+
+#include "caffe/layer.hpp"
+#include "caffe/common_layers.hpp"
+#include "caffe/util/io.hpp"
+#include "caffe/util/math_functions.hpp"
+#include <math.h> 
+namespace caffe {
+
+
+template <typename Dtype>
+void BilinearPatchLayer<Dtype>::LayerSetUp(
+  const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
+  CHECK_EQ(bottom[0]->num(), bottom[1]->num());
+  CHECK_EQ(bottom[0]->width()*bottom[0]->height(),bottom[1]->width()*bottom[1]->height());
+
+  
+//calculate number of patches
+  patch_h = this->layer_param_.bilinear_patch_param().patch_h();
+  patch_w = this->layer_param_.bilinear_patch_param().patch_w();
+  num_h = (int) bottom[0]->height() / patch_h;
+  num_w = (int) bottom[0]->width() / patch_w;
+
+  for (int k = 0; k < num_h * num_w; k++){
+        Blob<Dtype> * bl1 = new Blob<Dtype>();
+	bl1->Reshape(bottom[0]->num(), bottom[0]->channels(), patch_h, patch_w);
+	buffer1_matrix.push_back(bl1);
+	Blob<Dtype> * bl2 = new Blob<Dtype>();
+	bl2->Reshape(bottom[0]->num(), bottom[1]->channels(), patch_h, patch_w);
+	buffer2_matrix.push_back(bl2);
+
+  }
+
+  
+//  buffer1->Reshape(bottom[0]->num(), bottom[0]->channels(), patch_h, patch_w);
+//  buffer2->Reshape(bottom[0]->num(), bottom[1]->channels(), patch_h, patch_w);
+  buffer3.Reshape(1, bottom[0]->channels()*bottom[1]->channels(), 1, 1);
+
+  dldx_buffer.Reshape(1, bottom[0]->channels()*bottom[1]->channels(), 1, 1);
+
+//wrong size, should be patch_h, patch_w
+  dlda_buffer.Reshape(1, bottom[0]->channels(), bottom[0]->height(), bottom[0]->width());
+  dldb_buffer.Reshape(1, bottom[1]->channels(), bottom[1]->height(), bottom[1]->width());
+}
+         
+template <typename Dtype>
+void BilinearPatchLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {
+  top[0]->Reshape(bottom[0]->num(), bottom[0]->channels() * bottom[1]->channels(), num_h, num_w);   
+}
+
+template <typename Dtype>
+void BilinearPatchLayer<Dtype>::Forward_cpu(
+    const vector<Blob<Dtype>*>& bottom,
+    const vector<Blob<Dtype>*>& top) {  
+
+
+  for (int n = 0; n < bottom[0]->num(); n++){
+    for(int i = 0; i < num_h; i++){
+      for(int j = 0; j < num_w; j++){
+        Blob<Dtype> * buffer1 = buffer1_matrix[i*num_w + j];
+
+        for(int c = 0; c < bottom[0]->channels(); c++){
+          for(int ii = 0; ii < patch_h; ii++){
+            for(int jj = 0; jj < patch_w; jj++) {
+              buffer1->mutable_cpu_data()[patch_h*patch_w*bottom[0]->channels()*n + patch_h*patch_w*c + ii*patch_w + jj] = bottom[0]->cpu_data()[n * bottom[0]->channels() * bottom[0]->width() * bottom[0]->height() + bottom[0]->width()*bottom[0]->height() * c + bottom[0]->width()*(i*patch_h+ii) + patch_w*j + jj];
+            }
+          }
+        }      
+	Blob<Dtype> * buffer2 = buffer2_matrix[i*num_w + j];
+        for(int c = 0; c < bottom[1]->channels(); c++){
+          for(int ii = 0; ii < patch_h; ii++){
+            for(int jj = 0; jj < patch_w; jj++) {
+              buffer2->mutable_cpu_data()[patch_h*patch_w*bottom[1]->channels()*n + patch_h*patch_w*c + ii*patch_w + jj] = bottom[1]->cpu_data()[n * bottom[1]->channels() * bottom[1]->width() * bottom[1]->height() + bottom[1]->width()*bottom[1]->height() * c + bottom[1]->width()*(i*patch_h+ii) + patch_w*j + jj];
+            }
+          }
+        }
+
+       caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasTrans, bottom[0]->channels(), bottom[1]->channels(), patch_h * patch_w,
+  (Dtype)1., buffer1->cpu_data() + patch_h*patch_w*bottom[0]->channels()*n, buffer2->cpu_data() + patch_h*patch_w*bottom[1]->channels()*n, (Dtype)0., buffer3.mutable_cpu_data());
+
+       for(int c = 0; c < top[0]->channels(); c++){
+         for(int i = 0; i < num_h; i++){
+           for(int j = 0; j < num_w; j++){
+             top[0]->mutable_cpu_data()[n*top[0]->channels()*top[0]->height()*top[0]->width() + c*top[0]->height()*top[0]->width()+num_w*i + j] = buffer3.cpu_data()[c];
+           }
+         }
+       }
+  
+      }
+    }  
+  }
+
+	
+}
+
+template <typename Dtype>
+void BilinearPatchLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
+    const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
+
+
+  if (propagate_down[0]) {
+
+  for (int n = 0; n < bottom[0]->num(); n++){
+
+    for(int i = 0; i < num_h; i++){
+      for(int j = 0; j < num_w; j++) {
+        Blob<Dtype> * buffer2 = buffer2_matrix[i*num_w + j];
+        for(int c = 0; c < top[0]->channels(); c++){
+          dldx_buffer.mutable_cpu_diff()[c] = top[0]->cpu_diff()[c*num_h*num_w + i*num_w+j];
+        }
+int patch_h;
+        caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, bottom[0]->channels(), bottom[0]->width()*bottom[0]->height(), bottom[1]->channels(),
+  (Dtype)1., dldx_buffer.cpu_diff(), buffer2->cpu_data()+ patch_h*patch_w*bottom[0]->channels()*n, (Dtype)0., dlda_buffer.mutable_cpu_diff());
+//copy to bottom[0]->mutable_cpu_diff
+        for(int c = 0; c < bottom[0]->channels(); c++){
+          for(int ii = 0; ii  < patch_h; ii++){
+            for(int jj = 0; jj < patch_w; jj++) {
+                 bottom[0]->mutable_cpu_diff()[n * bottom[0]->channels() * bottom[0]->width() * bottom[0]->height() + bottom[0]->width()*bottom[0]->height() * c + bottom[0]->width()*(i*patch_h+ii) + patch_w*j + jj] = dlda_buffer.cpu_diff()[patch_h*patch_w*c + ii*patch_w + jj];
+            }
+          }
+        }  
+        
+      }
+    } 
+
+  } 
+  }    
+
+  if (propagate_down[1]) {
+  for (int n = 0; n < bottom[0]->num(); n++){
+ 
+    for(int i = 0; i < num_h; i++){
+      for(int j = 0; j < num_w; j++) {
+        Blob<Dtype> * buffer1 = buffer1_matrix[i*num_w + j];
+        for(int c = 0; c < top[0]->channels(); c++){
+          dldx_buffer.mutable_cpu_diff()[c] = top[0]->cpu_diff()[c*num_h*num_w + i*num_w+j];
+        }
+int patch_h;
+        caffe_cpu_gemm<Dtype>(CblasTrans, CblasNoTrans, bottom[1]->channels(), bottom[1]->width()*bottom[1]->height(), bottom[0]->channels(),
+  (Dtype)1., dldx_buffer.cpu_diff(), buffer1->cpu_data()+ patch_h*patch_w*bottom[1]->channels()*n, (Dtype)0., dldb_buffer.mutable_cpu_diff());
+        //copy to bottom[0]->mutable_cpu_diff
+        for(int c = 0; c < bottom[1]->channels(); c++){
+          for(int ii = 0; ii  < patch_h; ii++){
+            for(int jj = 0; jj < patch_w; jj++) {
+                 bottom[1]->mutable_cpu_diff()[n * bottom[1]->channels() * bottom[1]->width() * bottom[1]->height() + bottom[1]->width()*bottom[1]->height() * c + bottom[1]->width()*(i*patch_h+ii) + patch_w*j + jj] = dldb_buffer.cpu_diff()[patch_h*patch_w*c + ii*patch_w + jj];
+            }
+          }
+        }   
+        
+      }
+    } 
+
+  }
+
+  }
+
+
+
+}
+
+#ifdef CPU_ONLY
+STUB_GPU(BilinearPatchLayer);
+#endif
+
+INSTANTIATE_CLASS(BilinearPatchLayer);
+REGISTER_LAYER_CLASS(BilinearPatch);
+}  // namespace caffe
+
